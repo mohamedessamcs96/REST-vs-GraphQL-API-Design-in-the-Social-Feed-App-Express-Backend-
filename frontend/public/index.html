@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REST vs GraphQL — News Feed Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Design tokens ─────────────────────────────────────── */
+    :root {
+      --bg:       #ffffff;
+      --surface:  #f4f5f7;
+      --border:   #dde1e7;
+      --rest:     #3b82f6;
+      --rest-dim: #dbeafe;
+      --gql:      #f97316;
+      --gql-dim:  #ffedd5;
+      --text:     #111827;
+      --muted:    #6b7280;
+      --green:    #16a34a;
+      --mono:     'JetBrains Mono', monospace;
+      --sans:     'Syne', sans-serif;
+      --radius:   10px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 17px; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; }
+    header h1 span.rest { color: var(--rest); }
+    header h1 span.vs   { color: var(--muted); font-weight: 400; }
+    header h1 span.gql  { color: var(--gql); }
+    .badge {
+      font-family: var(--mono);
+      font-size: .7rem;
+      padding: .25rem .6rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .server-status { margin-left: auto; display: flex; gap: .75rem; align-items: center; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+    .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot-label { font-size: .75rem; color: var(--muted); }
+
+    /* ── Tab bar ───────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+    }
+    .tab {
+      padding: .85rem 1.4rem;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      transition: all .2s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active.rest-tab { color: var(--rest); border-color: var(--rest); }
+    .tab.active.gql-tab  { color: var(--gql);  border-color: var(--gql); }
+    .tab.active.compare-tab { color: var(--green); border-color: var(--green); }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .page { display: none; padding: 1.5rem 2rem; }
+    .page.active { display: block; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Panel ─────────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: .75rem 1rem;
+      font-size: .8rem;
+      font-weight: 600;
+      font-family: var(--mono);
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-header.rest { color: var(--rest); background: #eff6ff; }
+    .panel-header.gql  { color: var(--gql);  background: #fff7ed; }
+    .panel-body { padding: 1rem; }
+
+    /* ── Request builder ───────────────────────────────────── */
+    .request-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; flex-wrap: wrap; }
+    .method-badge {
+      font-family: var(--mono);
+      font-size: .7rem;
+      padding: .3rem .6rem;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .method-GET    { background: #dcfce7; color: #16a34a; }
+    .method-POST   { background: #dbeafe; color: #1d4ed8; }
+    .method-PUT    { background: #ffedd5; color: #ea580c; }
+    .method-DELETE { background: #fee2e2; color: #dc2626; }
+    .url-input {
+      flex: 1;
+      min-width: 140px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: .8rem;
+      padding: .4rem .7rem;
+    }
+    .url-input:focus { outline: none; border-color: var(--rest); }
+    .btn {
+      padding: .4rem 1rem;
+      border-radius: 6px;
+      border: none;
+      font-family: var(--sans);
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn.rest-btn { background: var(--rest); color: #fff; }
+    .btn.gql-btn  { background: var(--gql);  color: #fff; }
+    .btn.sm { padding: .3rem .7rem; font-size: .75rem; }
+
+    /* ── Code / JSON display ───────────────────────────────── */
+    pre.code-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .75rem 1rem;
+      font-family: var(--mono);
+      font-size: .75rem;
+      line-height: 1.6;
+      overflow: auto;
+      max-height: 280px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .label { font-size: .75rem; color: var(--muted); margin-bottom: .35rem; font-family: var(--mono); }
+    .spacer { height: .75rem; }
+
+    /* ── Query editor (GraphQL) ────────────────────────────── */
+    textarea.query-editor {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--gql);
+      font-family: var(--mono);
+      font-size: .8rem;
+      padding: .7rem .9rem;
+      resize: vertical;
+      min-height: 120px;
+      line-height: 1.6;
+    }
+    textarea.query-editor:focus { outline: none; border-color: var(--gql); }
+
+    /* ── Quick-select query buttons ────────────────────────── */
+    .query-pills { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
+    .pill {
+      font-family: var(--mono);
+      font-size: .68rem;
+      padding: .2rem .55rem;
+      border-radius: 4px;
+      border: 1px solid var(--gql-dim);
+      color: var(--gql);
+      background: transparent;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .pill:hover { background: var(--gql-dim); }
+
+    /* ── Request log ───────────────────────────────────────── */
+    .req-log {
+      font-family: var(--mono);
+      font-size: .72rem;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: .3rem;
+    }
+    .req-log li {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .3rem .6rem;
+      background: var(--bg);
+      border-radius: 4px;
+      border-left: 3px solid var(--border);
+    }
+    .req-log li.rest-req { border-color: var(--rest); }
+    .req-log li.gql-req  { border-color: var(--gql); }
+    .req-log .ts { color: var(--muted); font-size: .65rem; }
+    .req-count {
+      font-family: var(--mono);
+      font-size: .85rem;
+      font-weight: 700;
+      padding: .5rem 1rem;
+      border-radius: 6px;
+      display: inline-block;
+      margin-bottom: .75rem;
+    }
+    .rest-count-bg { background: var(--rest-dim); color: var(--rest); }
+    .gql-count-bg  { background: var(--gql-dim);  color: var(--gql); }
+
+    /* ── News feed cards ───────────────────────────────────── */
+    .feed-list { display: flex; flex-direction: column; gap: .75rem; }
+    .post-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      transition: border-color .2s;
+    }
+    .post-card:hover { border-color: #3a3f50; }
+    .post-meta { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .7rem; font-weight: 700; font-family: var(--mono);
+      flex-shrink: 0;
+    }
+    .avatar.rest-av { background: var(--rest-dim); color: var(--rest); }
+    .avatar.gql-av  { background: var(--gql-dim);  color: var(--gql); }
+    .post-author { font-weight: 600; font-size: .9rem; }
+    .post-date   { font-size: .72rem; color: var(--muted); margin-top: .1rem; }
+    .post-content { font-size: .88rem; line-height: 1.6; color: #374151; margin-bottom: .6rem; }
+    .post-footer { display: flex; align-items: center; gap: 1rem; }
+    .like-btn {
+      background: none; border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px;
+      padding: .3rem .7rem; font-size: .75rem;
+      cursor: pointer; transition: all .15s;
+      font-family: var(--sans);
+    }
+    .like-btn:hover { border-color: var(--rest); color: var(--rest); }
+    .like-btn.gql-like:hover { border-color: var(--gql); color: var(--gql); }
+    .likes-count { font-size: .8rem; color: var(--muted); font-family: var(--mono); }
+
+    /* ── Comparison table ──────────────────────────────────── */
+    .compare-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .compare-table th, .compare-table td {
+      padding: .7rem 1rem;
+      border: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    .compare-table th { background: var(--surface); font-weight: 600; font-size: .75rem; color: var(--muted); }
+    .compare-table tr:nth-child(even) td { background: #f9fafb; }
+    .tag-rest { color: var(--rest); font-weight: 700; }
+    .tag-gql  { color: var(--gql);  font-weight: 700; }
+    .tag-good { color: var(--green); }
+    .tag-warn { color: #fbbf24; }
+    .tag-bad  { color: #f87171; }
+
+    /* ── Concept callout ───────────────────────────────────── */
+    .callout {
+      border-left: 3px solid var(--border);
+      padding: .75rem 1rem;
+      margin: .75rem 0;
+      border-radius: 0 6px 6px 0;
+      font-size: .82rem;
+      line-height: 1.6;
+      background: var(--surface);
+    }
+    .callout.info  { border-color: var(--rest); }
+    .callout.warn  { border-color: #fbbf24; }
+    .callout.gql   { border-color: var(--gql); }
+    .callout strong { color: var(--text); }
+
+    /* ── Spinner ───────────────────────────────────────────── */
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--text); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: .4rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Create post form ──────────────────────────────────── */
+    .create-form { display: flex; flex-direction: column; gap: .5rem; margin-bottom: 1rem; }
+    .create-form select, .create-form textarea.post-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: .82rem;
+      padding: .5rem .75rem;
+    }
+    .create-form select:focus, .create-form textarea.post-input:focus { outline: none; border-color: var(--gql); }
+    .create-form textarea.post-input { resize: vertical; min-height: 70px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <span class="rest">REST</span>
+    <span class="vs"> vs </span>
+    <span class="gql">GraphQL</span>
+  </h1>
+  <span class="badge">Node.js Teaching Demo</span>
+  <div class="server-status">
+    <div class="dot" id="rest-dot"></div>
+    <span class="dot-label">:3001 REST</span>
+    <div class="dot" id="gql-dot"></div>
+    <span class="dot-label">:3002 GraphQL</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab rest-tab active" onclick="showPage('feed-page', this)">📰 News Feed</div>
+  <div class="tab rest-tab" onclick="showPage('rest-page', this)">🟦 REST Explorer</div>
+  <div class="tab gql-tab"  onclick="showPage('gql-page', this)">🟧 GraphQL Explorer</div>
+  <div class="tab compare-tab" onclick="showPage('compare-page', this)">⚡ Comparison</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 1: LIVE NEWS FEED (side by side)
+══════════════════════════════════════════════════════════ -->
+<div id="feed-page" class="page active">
+  <p style="color:var(--muted);font-size:.82rem;margin-bottom:1rem;">
+    Both feeds show the same data — watch the <strong style="color:var(--text)">Request Counter</strong> to see how many HTTP calls each approach makes.
+  </p>
+  <div class="two-col">
+
+    <!-- REST FEED -->
+    <div>
+      <div class="panel">
+        <div class="panel-header rest">🟦 REST Feed  ·  GET /api/feed/full</div>
+        <div class="panel-body">
+          <span class="req-count rest-count-bg" id="rest-req-count">0 requests</span>
+          <button class="btn rest-btn sm" onclick="loadRestFeed()">↺ Reload</button>
+          <div class="spacer"></div>
+          <div id="rest-feed" class="feed-list">
+            <span style="color:var(--muted);font-size:.8rem;">Click Reload to fetch…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRAPHQL FEED -->
+    <div>
+      <div class="panel">
+        <div class="panel-header gql">🟧 GraphQL Feed  ·  POST /graphql</div>
+        <div class="panel-body">
+          <span class="req-count gql-count-bg" id="gql-req-count">0 requests</span>
+          <button class="btn gql-btn sm" onclick="loadGqlFeed()">↺ Reload</button>
+          <div class="spacer"></div>
+          <div class="callout gql" style="margin-top:0;font-size:.75rem;">
+            <strong>Query used:</strong><br/>
+            <code style="color:var(--gql)">{ feed { id content likes author { name avatar } } }</code>
+            <br/>Notice: no <em>bio</em>, no <em>commentIds</em> — only what we asked for!
+          </div>
+          <div id="gql-feed" class="feed-list">
+            <span style="color:var(--muted);font-size:.8rem;">Click Reload to fetch…</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Create post section -->
+  <h3 style="margin:1.5rem 0 .75rem;font-size:1rem;">✍️ Create a Post (via GraphQL mutation)</h3>
+  <div style="max-width:480px;">
+    <div class="create-form">
+      <select id="new-author">
+        <option value="1">Alice Johnson</option>
+        <option value="2">Bob Smith</option>
+        <option value="3">Clara Diaz</option>
+        <option value="4">David Park</option>
+      </select>
+      <textarea class="post-input" id="new-content" placeholder="What's on your mind?">GraphQL mutations let us change data with the same query language we use to read it. Pretty elegant!</textarea>
+      <button class="btn gql-btn" onclick="createPost()">Post via GraphQL Mutation</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 2: REST EXPLORER
+══════════════════════════════════════════════════════════ -->
+<div id="rest-page" class="page">
+  <div class="callout info">
+    <strong>How REST works:</strong> Each resource lives at a different URL. You use HTTP verbs (GET, POST, PUT, DELETE) to interact with them. The server decides what data shape you get back — you can't ask for less or more.
+  </div>
+
+  <h3 style="margin:.75rem 0 .75rem;font-size:.9rem;color:var(--muted);">Try an endpoint:</h3>
+
+  <div class="two-col">
+    <div>
+      <div class="panel">
+        <div class="panel-header rest">Request</div>
+        <div class="panel-body">
+
+          <div class="request-row">
+            <span class="method-badge method-GET">GET</span>
+            <input class="url-input" id="rest-url" value="http://localhost:3001/api/feed" />
+            <button class="btn rest-btn" onclick="sendRest('GET')">Send</button>
+          </div>
+
+          <div class="query-pills">
+            <button class="pill" style="border-color:var(--rest-dim);color:var(--rest);" onclick="setUrl('http://localhost:3001/api/feed')">GET /feed</button>
+            <button class="pill" style="border-color:var(--rest-dim);color:var(--rest);" onclick="setUrl('http://localhost:3001/api/feed/full')">GET /feed/full</button>
+            <button class="pill" style="border-color:var(--rest-dim);color:var(--rest);" onclick="setUrl('http://localhost:3001/api/users')">GET /users</button>
+            <button class="pill" style="border-color:var(--rest-dim);color:var(--rest);" onclick="setUrl('http://localhost:3001/api/users/1')">GET /users/1</button>
+            <button class="pill" style="border-color:var(--rest-dim);color:var(--rest);" onclick="setUrl('http://localhost:3001/api/posts/101')">GET /posts/101</button>
+            <button class="pill" style="border-color:var(--rest-dim);color:var(--rest);" onclick="setUrl('http://localhost:3001/api/posts/101/comments')">GET /posts/101/comments</button>
+          </div>
+
+          <div class="callout warn" style="font-size:.75rem;">
+            <strong>⚠️ Over-fetching demo:</strong> Try <code>GET /api/feed</code> — you get back <em>commentIds</em> even if your UI doesn't need them. The server always sends the same shape.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="panel-header rest">Response</div>
+        <div class="panel-body">
+          <div class="label">STATUS</div>
+          <div id="rest-status" style="font-family:var(--mono);font-size:.8rem;margin-bottom:.5rem;color:var(--muted);">—</div>
+          <div class="label">BODY</div>
+          <pre class="code-box" id="rest-response">Hit "Send" to make a request…</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin:1rem 0 .5rem;font-size:.9rem;color:var(--muted);">Request Log</h3>
+  <ul class="req-log" id="rest-log"></ul>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 3: GRAPHQL EXPLORER
+══════════════════════════════════════════════════════════ -->
+<div id="gql-page" class="page">
+  <div class="callout gql">
+    <strong>How GraphQL works:</strong> There's a <em>single endpoint</em> — <code>POST /graphql</code>. You write a query describing exactly the fields you want. The server returns exactly that shape — no more, no less.
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="panel">
+        <div class="panel-header gql">Query Editor</div>
+        <div class="panel-body">
+
+          <div class="label">PRESET QUERIES — click to load</div>
+          <div class="query-pills">
+            <button class="pill" onclick="setQuery(QUERIES.feedMinimal)">Feed (minimal)</button>
+            <button class="pill" onclick="setQuery(QUERIES.feedFull)">Feed (with author)</button>
+            <button class="pill" onclick="setQuery(QUERIES.feedDeep)">Feed (deep: comments)</button>
+            <button class="pill" onclick="setQuery(QUERIES.users)">All users</button>
+            <button class="pill" onclick="setQuery(QUERIES.userPosts)">User + posts</button>
+            <button class="pill" onclick="setQuery(QUERIES.createPost)">Mutation: create</button>
+            <button class="pill" onclick="setQuery(QUERIES.likePost)">Mutation: like</button>
+          </div>
+
+          <textarea class="query-editor" id="gql-query" rows="8">{
+  feed {
+    id
+    content
+    likes
+    author {
+      name
+      avatar
+    }
+  }
+}</textarea>
+          <div class="spacer"></div>
+          <button class="btn gql-btn" onclick="sendGql()">▶ Run Query</button>
+          <div class="spacer"></div>
+          <div class="callout gql" style="font-size:.75rem;margin-top:.5rem;">
+            <strong>Try it live:</strong> Remove <code>author { name avatar }</code> from the query above and re-run. The response will shrink — the server won't send what you didn't ask for.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="panel-header gql">Response</div>
+        <div class="panel-body">
+          <div class="label">STATUS</div>
+          <div id="gql-status" style="font-family:var(--mono);font-size:.8rem;margin-bottom:.5rem;color:var(--muted);">—</div>
+          <div class="label">DATA</div>
+          <pre class="code-box" id="gql-response">Hit "Run Query" to execute…</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin:1rem 0 .5rem;font-size:.9rem;color:var(--muted);">Request Log  <span style="font-weight:400;color:var(--muted)">(notice: always 1 HTTP call)</span></h3>
+  <ul class="req-log" id="gql-log"></ul>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PAGE 4: COMPARISON
+══════════════════════════════════════════════════════════ -->
+<div id="compare-page" class="page">
+
+  <h2 style="font-size:1.1rem;margin-bottom:1rem;">Side-by-Side Comparison</h2>
+
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>Concept</th>
+        <th class="tag-rest">REST</th>
+        <th class="tag-gql">GraphQL</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Endpoint</strong></td>
+        <td>Many URLs<br/><code>/api/posts</code>, <code>/api/users/:id</code>…</td>
+        <td>Single URL<br/><code>POST /graphql</code></td>
+      </tr>
+      <tr>
+        <td><strong>HTTP Methods</strong></td>
+        <td>GET, POST, PUT, PATCH, DELETE</td>
+        <td>Always POST (query vs mutation)</td>
+      </tr>
+      <tr>
+        <td><strong>Data Shape</strong></td>
+        <td class="tag-warn">Server decides. You get what you're given.</td>
+        <td class="tag-good">Client decides. Ask for exactly what you need.</td>
+      </tr>
+      <tr>
+        <td><strong>Over-fetching</strong></td>
+        <td class="tag-warn">Common. <code>GET /users</code> returns all fields even if you only need the name.</td>
+        <td class="tag-good">Eliminated. Only requested fields are sent.</td>
+      </tr>
+      <tr>
+        <td><strong>Under-fetching (N+1)</strong></td>
+        <td class="tag-warn">Common. Getting a feed + author names = 1 + N requests.</td>
+        <td class="tag-good">Solved. Ask for nested data in one query.</td>
+      </tr>
+      <tr>
+        <td><strong>Type System</strong></td>
+        <td>Optional (OpenAPI/Swagger)</td>
+        <td class="tag-good">Built-in. Schema defines all types & relations.</td>
+      </tr>
+      <tr>
+        <td><strong>Documentation</strong></td>
+        <td>External (Swagger, Postman)</td>
+        <td class="tag-good">Introspection — self-documenting.</td>
+      </tr>
+      <tr>
+        <td><strong>Versioning</strong></td>
+        <td class="tag-warn"><code>/api/v1/</code> → <code>/api/v2/</code> — breaking changes require new versions.</td>
+        <td class="tag-good">Deprecate fields, add new ones — no breaking changes.</td>
+      </tr>
+      <tr>
+        <td><strong>Caching</strong></td>
+        <td class="tag-good">HTTP cache headers work natively (CDN-friendly).</td>
+        <td class="tag-warn">Harder — all requests are POST. Need custom solutions.</td>
+      </tr>
+      <tr>
+        <td><strong>File Upload</strong></td>
+        <td class="tag-good">Simple multipart/form-data.</td>
+        <td class="tag-warn">Needs workarounds or separate REST endpoint.</td>
+      </tr>
+      <tr>
+        <td><strong>Real-time</strong></td>
+        <td>WebSockets/SSE (separate setup)</td>
+        <td class="tag-good">Subscriptions are part of the spec.</td>
+      </tr>
+      <tr>
+        <td><strong>Error handling</strong></td>
+        <td>HTTP status codes (200, 404, 500…)</td>
+        <td class="tag-warn">Always 200. Errors are inside the JSON response body.</td>
+      </tr>
+      <tr>
+        <td><strong>Best for</strong></td>
+        <td>Public APIs, simple CRUD, file serving, CDN content</td>
+        <td>Complex UIs, mobile apps, multiple clients with different data needs</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+    <div class="callout info">
+      <strong>When to choose REST:</strong><br/>
+      Public third-party APIs, simple read-heavy apps, when HTTP caching matters, when your team already knows REST well, or when you're building a simple CRUD service.
+    </div>
+    <div class="callout gql">
+      <strong>When to choose GraphQL:</strong><br/>
+      Complex apps with many UI variations, mobile clients (bandwidth matters), when different consumers need different shapes of the same data, or when rapid product iteration requires frequent schema changes.
+    </div>
+  </div>
+
+  <div class="callout warn" style="margin-top:1rem;">
+    <strong>💡 The real-world answer:</strong> Facebook invented GraphQL because they had thousands of different clients (web, iOS, Android, third-party) all needing different slices of the same social graph. Most apps don't need that — REST is often the simpler, more maintainable choice. <em>Use the right tool for your context.</em>
+  </div>
+</div>
+
+<script>
+// ── Server URLs ──────────────────────────────────────────────
+const REST_URL = "http://localhost:3001";
+const GQL_URL  = "http://localhost:3002/graphql";
+
+// ── Page switching ───────────────────────────────────────────
+function showPage(id, tab) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  tab.classList.add("active");
+}
+
+// ── Server health check ──────────────────────────────────────
+async function checkServers() {
+  for (const [url, dotId] of [[REST_URL + "/api/users", "rest-dot"], [GQL_URL, "gql-dot"]]) {
+    try {
+      const opts = url.includes("graphql")
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: "{ users { id } }" }) }
+        : {};
+      await fetch(url, opts);
+      document.getElementById(dotId).classList.add("online");
+    } catch { /* offline */ }
+  }
+}
+checkServers();
+setInterval(checkServers, 5000);
+
+// ── REST Explorer ────────────────────────────────────────────
+let restLogEntries = [];
+function setUrl(u) { document.getElementById("rest-url").value = u; }
+
+async function sendRest(method = "GET") {
+  const url = document.getElementById("rest-url").value;
+  const t0 = Date.now();
+  document.getElementById("rest-status").textContent = "⏳ loading…";
+  document.getElementById("rest-response").textContent = "";
+  try {
+    const res = await fetch(url, { method });
+    const ms  = Date.now() - t0;
+    const json = await res.json();
+    document.getElementById("rest-status").textContent = `${res.status} ${res.statusText}  ·  ${ms}ms`;
+    document.getElementById("rest-response").textContent = JSON.stringify(json, null, 2);
+    logReq("rest-log", "rest-req", `${method} ${url.replace(REST_URL, "")}  (${ms}ms)`);
+  } catch(e) {
+    document.getElementById("rest-status").textContent = "❌ Error – is the REST server running?";
+    document.getElementById("rest-response").textContent = e.message;
+  }
+}
+
+// ── GraphQL Explorer ─────────────────────────────────────────
+const QUERIES = {
+  feedMinimal: `{
+  feed {
+    id
+    content
+    likes
+  }
+}`,
+  feedFull: `{
+  feed {
+    id
+    content
+    likes
+    author {
+      name
+      avatar
+    }
+  }
+}`,
+  feedDeep: `{
+  feed {
+    id
+    content
+    likes
+    author { name }
+    comments {
+      text
+      author { name }
+    }
+  }
+}`,
+  users: `{
+  users {
+    id
+    name
+    bio
+    avatar
+  }
+}`,
+  userPosts: `{
+  user(id: "1") {
+    name
+    bio
+    posts {
+      id
+      content
+      likes
+    }
+  }
+}`,
+  createPost: `mutation {
+  createPost(
+    authorId: "1"
+    content: "Hello from a mutation! 🚀"
+  ) {
+    id
+    content
+    author { name }
+  }
+}`,
+  likePost: `mutation {
+  likePost(id: "101") {
+    id
+    likes
+    content
+  }
+}`,
+};
+
+function setQuery(q) { document.getElementById("gql-query").value = q; }
+
+async function sendGql() {
+  const query = document.getElementById("gql-query").value;
+  const t0 = Date.now();
+  document.getElementById("gql-status").textContent = "⏳ loading…";
+  document.getElementById("gql-response").textContent = "";
+  try {
+    const res  = await fetch(GQL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    const ms   = Date.now() - t0;
+    const json = await res.json();
+    document.getElementById("gql-status").textContent = `${res.status} ${res.statusText}  ·  ${ms}ms`;
+    document.getElementById("gql-response").textContent = JSON.stringify(json, null, 2);
+    logReq("gql-log", "gql-req", `POST /graphql  (${ms}ms)  → ${query.trim().slice(0,60)}…`);
+  } catch(e) {
+    document.getElementById("gql-status").textContent = "❌ Error – is the GraphQL server running?";
+    document.getElementById("gql-response").textContent = e.message;
+  }
+}
+
+// ── Request logger ────────────────────────────────────────────
+function logReq(listId, cls, label) {
+  const li = document.createElement("li");
+  li.className = cls;
+  const ts = new Date().toLocaleTimeString("en", { hour12: false });
+  li.innerHTML = `<span class="ts">${ts}</span> ${label}`;
+  const list = document.getElementById(listId);
+  list.prepend(li);
+  if (list.children.length > 20) list.lastChild.remove();
+}
+
+// ── News Feed ─────────────────────────────────────────────────
+let restFeedRequests = 0;
+let gqlFeedRequests  = 0;
+
+async function loadRestFeed() {
+  restFeedRequests = 0;
+  document.getElementById("rest-feed").innerHTML = '<span class="spinner"></span> Loading…';
+  try {
+    restFeedRequests++;
+    updateRestCount();
+    const res  = await fetch(`${REST_URL}/api/feed/full`);
+    const json = await res.json();
+    renderFeed("rest-feed", json.data, "rest");
+    updateRestCount();
+  } catch(e) {
+    document.getElementById("rest-feed").innerHTML = `<span style="color:#f87171;font-size:.8rem;">❌ Cannot reach REST server at port 3001</span>`;
+  }
+}
+
+async function loadGqlFeed() {
+  gqlFeedRequests = 0;
+  document.getElementById("gql-feed").innerHTML = '<span class="spinner"></span> Loading…';
+  try {
+    gqlFeedRequests++;
+    updateGqlCount();
+    const res  = await fetch(GQL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: `{ feed { id content likes author { name avatar } } }` }),
+    });
+    const json = await res.json();
+    renderFeed("gql-feed", json.data.feed, "gql");
+    updateGqlCount();
+  } catch(e) {
+    document.getElementById("gql-feed").innerHTML = `<span style="color:#f87171;font-size:.8rem;">❌ Cannot reach GraphQL server at port 3002</span>`;
+  }
+}
+
+function updateRestCount() {
+  document.getElementById("rest-req-count").textContent =
+    `${restFeedRequests} HTTP request${restFeedRequests !== 1 ? "s" : ""}`;
+}
+function updateGqlCount() {
+  document.getElementById("gql-req-count").textContent =
+    `${gqlFeedRequests} HTTP request${gqlFeedRequests !== 1 ? "s" : ""}`;
+}
+
+function renderFeed(containerId, posts, type) {
+  if (!posts || !posts.length) {
+    document.getElementById(containerId).innerHTML = "<span style='color:var(--muted)'>No posts.</span>";
+    return;
+  }
+  const avCls   = type === "rest" ? "rest-av" : "gql-av";
+  const likeCls = type === "rest" ? "" : "gql-like";
+  const html = posts.map(p => `
+    <div class="post-card" id="card-${type}-${p.id}">
+      <div class="post-meta">
+        <div class="avatar ${avCls}">${p.author?.avatar || "??"}</div>
+        <div>
+          <div class="post-author">${p.author?.name || "Unknown"}</div>
+          <div class="post-date">${new Date(p.createdAt).toLocaleString()}</div>
+        </div>
+      </div>
+      <div class="post-content">${p.content}</div>
+      <div class="post-footer">
+        <button class="like-btn ${likeCls}" onclick="likePost('${p.id}', '${type}', this)">
+          ♡ Like
+        </button>
+        <span class="likes-count" id="likes-${type}-${p.id}">${p.likes} likes</span>
+      </div>
+    </div>
+  `).join("");
+  document.getElementById(containerId).innerHTML = html;
+}
+
+async function likePost(id, type, btn) {
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    if (type === "rest") {
+      restFeedRequests++;
+      updateRestCount();
+      const res  = await fetch(`${REST_URL}/api/posts/${id}/like`, { method: "PUT" });
+      const json = await res.json();
+      document.getElementById(`likes-rest-${id}`).textContent = `${json.data.likes} likes`;
+    } else {
+      gqlFeedRequests++;
+      updateGqlCount();
+      const res  = await fetch(GQL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: `mutation { likePost(id: "${id}") { likes } }` }),
+      });
+      const json = await res.json();
+      document.getElementById(`likes-gql-${id}`).textContent = `${json.data.likePost.likes} likes`;
+    }
+  } catch {}
+  btn.textContent = "♥ Liked";
+  btn.style.color  = type === "rest" ? "var(--rest)" : "var(--gql)";
+  btn.style.borderColor = type === "rest" ? "var(--rest)" : "var(--gql)";
+}
+
+async function createPost() {
+  const authorId = document.getElementById("new-author").value;
+  const content  = document.getElementById("new-content").value;
+  if (!content.trim()) return;
+  try {
+    await fetch(GQL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: `mutation { createPost(authorId: "${authorId}", content: ${JSON.stringify(content)}) { id } }` }),
+    });
+    document.getElementById("new-content").value = "";
+    loadGqlFeed();
+    loadRestFeed();
+  } catch(e) {
+    alert("Could not create post: " + e.message);
+  }
+}
+</script>
+</body>
+</html>

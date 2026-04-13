@@ -1,0 +1,16 @@
+{
+  "name": "newsfeed-demo",
+  "version": "1.0.0",
+  "description": "REST vs GraphQL news feed – teaching demo for Node.js students",
+  "scripts": {
+    "install:all": "npm install --prefix rest-server && npm install --prefix graphql-server && npm install --prefix frontend",
+    "start:rest": "node rest-server/index.js",
+    "start:gql": "node graphql-server/index.js",
+    "start:frontend": "node frontend/server.js"
+  },
+  "workspaces": [
+    "rest-server",
+    "graphql-server",
+    "frontend"
+  ]
+}
