@@ -317,3 +317,4 @@ type Comment {
 3. GraphQL eliminates over-fetching and N+1 — the two biggest REST pain points.
 4. Neither is universally "better" — context decides the winner.
 5. Facebook invented GraphQL because they had thousands of clients all needing different slices of the same social graph. Most apps don't have that problem.
+# REST-vs-GraphQL-API-Design-in-the-Social-Feed-App-Express-Backend-
